@@ -62,3 +62,22 @@ def test_brightness_and_power(tmp_path):
     a2 = build_parser().parse_args(["off"])
     assert asyncio.run(cmd_power(a2, dev, config_path=cfgp)) == 0
     assert ("set_power", False) in dev.calls
+
+
+def test_gif_sends_frames(tmp_path):
+    from PIL import Image as PILImage
+    from idotctl.cli import cmd_gif
+    # create a 3-frame GIF
+    frames = [PILImage.new("RGB", (20, 20), c) for c in [(255,0,0),(0,255,0),(0,0,255)]]
+    p = tmp_path / "a.gif"
+    frames[0].save(p, save_all=True, append_images=frames[1:], duration=100, loop=0)
+    cfgp = tmp_path / "c.json"
+    from idotctl import config
+    config.set_last_device("AA:BB", path=cfgp)
+    dev = FakeDevice()
+    args = build_parser().parse_args(["gif", str(p), "--no-dither"])
+    rc = asyncio.run(cmd_gif(args, dev, config_path=cfgp))
+    assert rc == 0
+    gif_call = [c for c in dev.calls if c[0] == "send_gif"][0]
+    assert gif_call[1] == 3   # 3 frames sent
+    assert gif_call[2] == 10  # default fps

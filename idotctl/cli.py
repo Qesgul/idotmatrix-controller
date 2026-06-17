@@ -83,7 +83,6 @@ async def cmd_power(args, device: DeviceAdapter, config_path: Path = config.CONF
 
 
 def cmd_preview(args) -> int:
-    from idotctl.core.imaging import PixelFrame  # noqa: F401
     frame = process_image(args.image, _opts_from_args(args))
     from PIL import Image
     img = Image.frombytes("RGB", (frame.size, frame.size), frame.pixels)
