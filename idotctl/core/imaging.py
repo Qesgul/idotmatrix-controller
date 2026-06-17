@@ -88,3 +88,21 @@ def process_image(path: str, opts: ImageOptions) -> PixelFrame:
     """任意图片 → size×size RGB 帧。纯函数,无硬件。"""
     img = _open_rgb(path)
     return _process_pil(img, opts)
+
+
+def process_gif(path: str, opts: ImageOptions) -> list[PixelFrame]:
+    """GIF → 多帧 PixelFrame，逐帧走同一条流水线。"""
+    try:
+        img = Image.open(path)
+        img.load()
+    except FileNotFoundError as e:
+        raise ImageError(f"图片不存在: {path}") from e
+    except (UnidentifiedImageError, OSError) as e:
+        raise ImageError(f"无法识别的图片格式: {path}") from e
+
+    frames: list[PixelFrame] = []
+    n_frames = getattr(img, "n_frames", 1)
+    for i in range(n_frames):
+        img.seek(i)
+        frames.append(_process_pil(img.convert("RGB"), opts))
+    return frames

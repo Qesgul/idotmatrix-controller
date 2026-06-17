@@ -78,3 +78,16 @@ def test_brightness_increases_value(tmp_path):
     dark = process_image(str(p), ImageOptions(dither=False, brightness=0.5))
     bright = process_image(str(p), ImageOptions(dither=False, brightness=1.5))
     assert bright.pixels[0] > dark.pixels[0]
+
+
+def test_process_gif_returns_all_frames(tmp_path):
+    from idotctl.core.imaging import process_gif
+    frames_in = []
+    for color in [(255, 0, 0), (0, 255, 0), (0, 0, 255)]:
+        frames_in.append(Image.new("RGB", (40, 40), color))
+    p = tmp_path / "anim.gif"
+    frames_in[0].save(p, save_all=True, append_images=frames_in[1:], duration=100, loop=0)
+    frames = process_gif(str(p), ImageOptions(dither=False))
+    assert len(frames) == 3
+    assert all(f.size == 32 for f in frames)
+    assert all(len(f.pixels) == 32 * 32 * 3 for f in frames)
