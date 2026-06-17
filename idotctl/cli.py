@@ -16,6 +16,8 @@ def _opts_from_args(args) -> ImageOptions:
         fit=args.fit,
         dither=not args.no_dither,
         brightness=args.brightness,
+        contrast=args.contrast,
+        saturation=args.saturation,
     )
 
 
@@ -48,8 +50,10 @@ async def cmd_send(args, device: DeviceAdapter, config_path: Path = config.CONFI
     frame = process_image(args.image, _opts_from_args(args))
     address = _resolve_address(args, config_path)
     await device.connect(address)
-    await device.send_image(frame)
-    await device.disconnect()
+    try:
+        await device.send_image(frame)
+    finally:
+        await device.disconnect()
     print(f"已发送图片到 {address}")
     return 0
 
@@ -58,8 +62,10 @@ async def cmd_gif(args, device: DeviceAdapter, config_path: Path = config.CONFIG
     frames = process_gif(args.gif, _opts_from_args(args))
     address = _resolve_address(args, config_path)
     await device.connect(address)
-    await device.send_gif(frames, args.fps)
-    await device.disconnect()
+    try:
+        await device.send_gif(frames, args.fps)
+    finally:
+        await device.disconnect()
     print(f"已发送 GIF({len(frames)} 帧) 到 {address}")
     return 0
 
@@ -67,8 +73,10 @@ async def cmd_gif(args, device: DeviceAdapter, config_path: Path = config.CONFIG
 async def cmd_brightness(args, device: DeviceAdapter, config_path: Path = config.CONFIG_PATH) -> int:
     address = _resolve_address(args, config_path)
     await device.connect(address)
-    await device.set_brightness(args.level)
-    await device.disconnect()
+    try:
+        await device.set_brightness(args.level)
+    finally:
+        await device.disconnect()
     print(f"亮度已设为 {args.level}")
     return 0
 
@@ -76,8 +84,10 @@ async def cmd_brightness(args, device: DeviceAdapter, config_path: Path = config
 async def cmd_power(args, device: DeviceAdapter, config_path: Path = config.CONFIG_PATH) -> int:
     address = _resolve_address(args, config_path)
     await device.connect(address)
-    await device.set_power(args.power)
-    await device.disconnect()
+    try:
+        await device.set_power(args.power)
+    finally:
+        await device.disconnect()
     print("已开屏" if args.power else "已关屏")
     return 0
 
@@ -95,6 +105,8 @@ def _add_image_opts(p: argparse.ArgumentParser) -> None:
     p.add_argument("--fit", choices=["crop", "letterbox", "stretch"], default="crop")
     p.add_argument("--no-dither", action="store_true")
     p.add_argument("--brightness", type=float, default=1.0)
+    p.add_argument("--contrast", type=float, default=1.0)
+    p.add_argument("--saturation", type=float, default=1.0)
 
 
 def build_parser() -> argparse.ArgumentParser:

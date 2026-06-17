@@ -9,7 +9,7 @@ class DeviceNotFoundError(IdotError):
     """扫描不到设备 / 未指定且无历史设备 / 连接失败。"""
 
 
-class ConnectionError(IdotError):
+class BleConnectionError(IdotError):
     """BLE 连接中断。"""
 
 

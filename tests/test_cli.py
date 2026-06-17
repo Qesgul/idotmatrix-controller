@@ -103,3 +103,23 @@ def test_main_preview_end_to_end(tmp_path):
     rc = main(["preview", img, "-o", str(out), "--no-dither"])
     assert rc == 0
     assert out.exists()
+
+
+def test_main_returns_1_on_image_error(tmp_path):
+    from unittest.mock import patch
+    from idotctl.cli import main
+    from idotctl.core.device import FakeDevice
+    with patch("idotctl.cli.SdkDevice", FakeDevice):
+        rc = main(["send", str(tmp_path / "nope.png"), "--device", "AA:BB"])
+    assert rc == 1
+
+
+def test_send_without_device_raises_error(tmp_path):
+    import pytest
+    from idotctl.errors import DeviceNotFoundError
+    cfgp = tmp_path / "empty.json"
+    dev = FakeDevice()
+    img = _img(tmp_path)
+    args = build_parser().parse_args(["send", img, "--no-dither"])
+    with pytest.raises(DeviceNotFoundError):
+        asyncio.run(cmd_send(args, dev, config_path=cfgp))

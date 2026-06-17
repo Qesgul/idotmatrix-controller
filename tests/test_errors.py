@@ -1,12 +1,12 @@
 import pytest
 from idotctl.errors import (
-    IdotError, DeviceNotFoundError, ConnectionError,
+    IdotError, DeviceNotFoundError, BleConnectionError,
     ImageError, FirmwareUnsupportedError,
 )
 
 
 def test_all_errors_subclass_base():
-    for cls in (DeviceNotFoundError, ConnectionError, ImageError, FirmwareUnsupportedError):
+    for cls in (DeviceNotFoundError, BleConnectionError, ImageError, FirmwareUnsupportedError):
         assert issubclass(cls, IdotError)
 
 

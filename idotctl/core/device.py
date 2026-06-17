@@ -9,7 +9,7 @@ from typing import Protocol, runtime_checkable
 from idotctl.core.imaging import PixelFrame
 from idotctl.errors import (
     DeviceNotFoundError,
-    ConnectionError as IdotConnectionError,
+    BleConnectionError,
     FirmwareUnsupportedError,
 )
 
@@ -204,7 +204,7 @@ class SdkDevice:
                 if attempt < 2:
                     await asyncio.sleep(2 ** attempt)  # 0 s, 1 s, 2 s
 
-        raise IdotConnectionError(
+        raise BleConnectionError(
             f"Could not connect to {address} after 3 attempts: {last_exc}"
         ) from last_exc
 
@@ -228,7 +228,7 @@ class SdkDevice:
         """Upload an animated GIF (one or more frames) to the device."""
         dev = self._device
         if dev is None:
-            raise IdotConnectionError("Not connected")
+            raise BleConnectionError("Not connected")
 
         try:
             speed_ms = max(1, round(1000 / max(1, fps)))
@@ -242,7 +242,7 @@ class SdkDevice:
             for idx, frame in enumerate(frames):
                 for pkt in _frame_packets(idx, frame):
                     await dev.write(pkt)
-        except IdotConnectionError:
+        except BleConnectionError:
             raise
         except Exception as exc:
             raise FirmwareUnsupportedError(
@@ -260,7 +260,7 @@ class SdkDevice:
         """
         dev = self._device
         if dev is None:
-            raise IdotConnectionError("Not connected")
+            raise BleConnectionError("Not connected")
 
         clamped = max(5, min(100, level))
         try:
@@ -274,7 +274,7 @@ class SdkDevice:
         """Turn the screen on or off."""
         dev = self._device
         if dev is None:
-            raise IdotConnectionError("Not connected")
+            raise BleConnectionError("Not connected")
 
         try:
             if on:
