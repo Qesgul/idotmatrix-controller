@@ -51,3 +51,30 @@ def test_invalid_size_raises_value_error(tmp_path):
     p = _make(tmp_path, (100, 100, 100))
     with pytest.raises(ValueError, match="size must be"):
         process_image(str(p), ImageOptions(size=0))
+
+
+def test_dither_runs_and_keeps_shape(tmp_path):
+    # 渐变图,dither 开启应正常产出正确尺寸帧
+    img = Image.new("RGB", (64, 64))
+    px = img.load()
+    for y in range(64):
+        for x in range(64):
+            px[x, y] = (x * 4 % 256, y * 4 % 256, (x + y) * 2 % 256)
+    p = tmp_path / "grad.png"
+    img.save(p)
+    frame = process_image(str(p), ImageOptions(dither=True))
+    assert frame.size == 32
+    assert len(frame.pixels) == 32 * 32 * 3
+
+
+def test_brightness_zero_yields_black(tmp_path):
+    p = _make(tmp_path, (200, 100, 50))
+    frame = process_image(str(p), ImageOptions(dither=False, brightness=0.0))
+    assert frame.pixels[0:3] == bytes((0, 0, 0))
+
+
+def test_brightness_increases_value(tmp_path):
+    p = _make(tmp_path, (100, 100, 100))
+    dark = process_image(str(p), ImageOptions(dither=False, brightness=0.5))
+    bright = process_image(str(p), ImageOptions(dither=False, brightness=1.5))
+    assert bright.pixels[0] > dark.pixels[0]
