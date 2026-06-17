@@ -81,3 +81,25 @@ def test_gif_sends_frames(tmp_path):
     gif_call = [c for c in dev.calls if c[0] == "send_gif"][0]
     assert gif_call[1] == 3   # 3 frames sent
     assert gif_call[2] == 10  # default fps
+
+
+def test_preview_writes_png(tmp_path):
+    from idotctl.cli import cmd_preview
+    img = _img(tmp_path, color=(123, 50, 200))
+    out = tmp_path / "preview.png"
+    args = build_parser().parse_args(["preview", img, "-o", str(out)])
+    rc = cmd_preview(args)
+    assert rc == 0
+    assert out.exists()
+    from PIL import Image
+    got = Image.open(out)
+    assert got.size == (32, 32)
+
+
+def test_main_preview_end_to_end(tmp_path):
+    from idotctl.cli import main
+    img = _img(tmp_path)
+    out = tmp_path / "e2e.png"
+    rc = main(["preview", img, "-o", str(out), "--no-dither"])
+    assert rc == 0
+    assert out.exists()
