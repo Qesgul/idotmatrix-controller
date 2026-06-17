@@ -16,8 +16,9 @@ def test_solid_color_no_dither(tmp_path):
     assert isinstance(frame, PixelFrame)
     assert frame.size == 32
     assert len(frame.pixels) == 32 * 32 * 3
-    # 纯红图缩放后仍应为红
-    assert frame.pixels[0:3] == bytes((255, 0, 0))
+    # 纯红图缩放后仍应为红（范围检查兼容不同 Pillow 版本的重采样差异）
+    r, g, b = frame.pixels[0], frame.pixels[1], frame.pixels[2]
+    assert r > 200 and g < 30 and b < 30
 
 
 def test_fit_modes_all_produce_32(tmp_path):
@@ -38,3 +39,15 @@ def test_letterbox_has_black_border(tmp_path):
 def test_missing_file_raises_image_error(tmp_path):
     with pytest.raises(ImageError):
         process_image(str(tmp_path / "nope.png"), ImageOptions())
+
+
+def test_invalid_fit_raises_value_error(tmp_path):
+    p = _make(tmp_path, (100, 100, 100))
+    with pytest.raises(ValueError, match="fit must be one of"):
+        process_image(str(p), ImageOptions(fit="invalid"))
+
+
+def test_invalid_size_raises_value_error(tmp_path):
+    p = _make(tmp_path, (100, 100, 100))
+    with pytest.raises(ValueError, match="size must be"):
+        process_image(str(p), ImageOptions(size=0))

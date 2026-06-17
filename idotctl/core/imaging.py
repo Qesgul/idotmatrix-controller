@@ -2,6 +2,7 @@
 from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Literal
 
 from PIL import Image, ImageEnhance, ImageOps, UnidentifiedImageError
 
@@ -10,12 +11,19 @@ from idotctl.errors import ImageError
 
 @dataclass(frozen=True)
 class ImageOptions:
-    fit: str = "crop"          # crop | letterbox | stretch
+    fit: Literal["crop", "letterbox", "stretch"] = "crop"
     dither: bool = True         # Floyd–Steinberg
     brightness: float = 1.0
     contrast: float = 1.0
     saturation: float = 1.0
     size: int = 32
+
+    def __post_init__(self) -> None:
+        _VALID_FIT = {"crop", "letterbox", "stretch"}
+        if self.fit not in _VALID_FIT:
+            raise ValueError(f"fit must be one of {_VALID_FIT}, got {self.fit!r}")
+        if self.size < 1:
+            raise ValueError(f"size must be >= 1, got {self.size!r}")
 
 
 @dataclass(frozen=True)
