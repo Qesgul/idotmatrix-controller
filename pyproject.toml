@@ -3,17 +3,24 @@ name = "idotmatrix-controller"
 version = "0.1.0"
 description = "自己的 iDotMatrix 32x32 LED 控制 CLI"
 requires-python = ">=3.10"
-dependencies = ["idotmatrix-sdk", "Pillow"]
+dependencies = [
+    "idotmatrix-sdk",
+    "Pillow",
+    "fastapi",
+    "uvicorn[standard]",
+    "python-multipart",
+]
 
 [project.optional-dependencies]
-dev = ["pytest"]
+dev = ["pytest", "httpx"]
 
 [project.scripts]
 idotctl = "idotctl.cli:main"
+idotctl-web = "idotctl.webserver.app:main"
 
 [build-system]
 requires = ["setuptools>=61"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools]
-packages = ["idotctl", "idotctl.core"]
+packages = ["idotctl", "idotctl.core", "idotctl.webserver"]
