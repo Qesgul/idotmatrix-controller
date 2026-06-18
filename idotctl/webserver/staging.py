@@ -57,6 +57,9 @@ class ImageStaging:
         n = getattr(img, "n_frames", 1)
         frames: list[PixelFrame] = []
         for i in range(n):
-            img.seek(i)
+            try:
+                img.seek(i)
+            except EOFError as exc:
+                raise ImageError("GIF 帧数据不完整") from exc
             frames.append(_process_pil(img.convert("RGB"), opts))
         return frames

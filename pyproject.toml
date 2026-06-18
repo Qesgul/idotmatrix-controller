@@ -24,3 +24,6 @@ build-backend = "setuptools.build_meta"
 
 [tool.setuptools]
 packages = ["idotctl", "idotctl.core", "idotctl.webserver"]
+
+[tool.setuptools.package-data]
+"idotctl.webserver" = ["static/*"]

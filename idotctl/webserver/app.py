@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Annotated, Literal
 
 import uvicorn
-from fastapi import Depends, FastAPI, File, UploadFile
+from fastapi import Depends, FastAPI, File, HTTPException, UploadFile
 from fastapi.responses import HTMLResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
@@ -26,6 +26,7 @@ from idotctl.webserver.staging import ImageStaging
 
 _STATIC = Path(__file__).parent / "static"
 _INDEX_HTML = (_STATIC / "index.html").read_text(encoding="utf-8")
+_MAX_UPLOAD_BYTES = 10 * 1024 * 1024  # 10 MB
 
 app = FastAPI(title="iDotMatrix Web UI")
 app.mount("/static", StaticFiles(directory=_STATIC), name="static")
@@ -111,7 +112,10 @@ async def api_connect(
     session: Annotated[DeviceSession, Depends(get_session)],
 ):
     await session.connect(req.address)
-    config.set_last_device(req.address)
+    try:
+        config.set_last_device(req.address)
+    except OSError:
+        pass
     return {"ok": True}
 
 
@@ -127,6 +131,8 @@ async def api_upload(
     staging: Annotated[ImageStaging, Depends(get_staging)],
 ):
     data = await file.read()
+    if len(data) > _MAX_UPLOAD_BYTES:
+        raise HTTPException(status_code=413, detail="文件过大(最大10MB)")
     filename = file.filename or "upload"
     staging.stage(data, filename)
     return {"ok": True, "filename": filename, "is_gif": filename.lower().endswith(".gif")}

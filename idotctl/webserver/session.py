@@ -45,22 +45,42 @@ class DeviceSession:
                 self._connected = False
                 self._address = None
 
+    def _clear_connection(self) -> None:
+        self._connected = False
+        self._address = None
+
     async def send_image(self, frame: PixelFrame) -> None:
         async with self._lock:
             self._require_connected()
-            await self._device.send_image(frame)
+            try:
+                await self._device.send_image(frame)
+            except Exception:
+                self._clear_connection()
+                raise
 
     async def send_gif(self, frames: list[PixelFrame], fps: int) -> None:
         async with self._lock:
             self._require_connected()
-            await self._device.send_gif(frames, fps)
+            try:
+                await self._device.send_gif(frames, fps)
+            except Exception:
+                self._clear_connection()
+                raise
 
     async def set_brightness(self, level: int) -> None:
         async with self._lock:
             self._require_connected()
-            await self._device.set_brightness(level)
+            try:
+                await self._device.set_brightness(level)
+            except Exception:
+                self._clear_connection()
+                raise
 
     async def set_power(self, on: bool) -> None:
         async with self._lock:
             self._require_connected()
-            await self._device.set_power(on)
+            try:
+                await self._device.set_power(on)
+            except Exception:
+                self._clear_connection()
+                raise

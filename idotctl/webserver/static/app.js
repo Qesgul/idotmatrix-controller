@@ -102,7 +102,15 @@ document.getElementById('btn-scan').addEventListener('click', async () => {
     if (!devices.length) { list.innerHTML = '<li>未发现设备</li>'; }
     devices.forEach(d => {
       const li = document.createElement('li');
-      li.innerHTML = `<span class="device-info">${d.name}<br><span class="device-addr">${d.address}</span></span>`;
+      const info = document.createElement('span');
+      info.className = 'device-info';
+      info.textContent = d.name;
+      const addrSpan = document.createElement('span');
+      addrSpan.className = 'device-addr';
+      addrSpan.textContent = d.address;
+      info.appendChild(document.createElement('br'));
+      info.appendChild(addrSpan);
+      li.appendChild(info);
       const btn = document.createElement('button');
       btn.textContent = '连接';
       btn.onclick = () => connectDevice(d.address);
@@ -205,7 +213,8 @@ document.getElementById('btn-send').addEventListener('click', async () => {
 });
 
 document.getElementById('btn-gif').addEventListener('click', async () => {
-  const fps = parseInt(document.getElementById('fps').value) || 10;
+  const _rawFps = parseInt(document.getElementById('fps').value, 10);
+  const fps = (Number.isNaN(_rawFps) || _rawFps < 1) ? 10 : _rawFps;
   try {
     await api('POST', '/api/gif', { fps, ...getParams() });
     toast('GIF 已发送到屏');
