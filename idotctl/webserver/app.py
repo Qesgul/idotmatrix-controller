@@ -3,7 +3,7 @@ from __future__ import annotations
 import argparse
 import socket
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, Literal
 
 import uvicorn
 from fastapi import Depends, FastAPI, File, UploadFile
@@ -59,7 +59,7 @@ class ConnectRequest(BaseModel):
 
 
 class ImageParams(BaseModel):
-    fit: str = "crop"
+    fit: Literal["crop", "letterbox", "stretch"] = "crop"
     dither: bool = True
     brightness: float = 1.0
     contrast: float = 1.0
@@ -68,7 +68,7 @@ class ImageParams(BaseModel):
 
 class GifParams(BaseModel):
     fps: int = 10
-    fit: str = "crop"
+    fit: Literal["crop", "letterbox", "stretch"] = "crop"
     dither: bool = True
     brightness: float = 1.0
     contrast: float = 1.0

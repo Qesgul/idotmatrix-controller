@@ -35,9 +35,11 @@ class DeviceSession:
 
     async def disconnect(self) -> None:
         async with self._lock:
-            await self._device.disconnect()
-            self._connected = False
-            self._address = None
+            try:
+                await self._device.disconnect()
+            finally:
+                self._connected = False
+                self._address = None
 
     async def send_image(self, frame: PixelFrame) -> None:
         async with self._lock:
