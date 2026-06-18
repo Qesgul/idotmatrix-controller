@@ -78,3 +78,71 @@ def test_disconnect():
     resp = client.post("/api/disconnect")
     assert resp.status_code == 200
     assert not session.is_connected
+
+
+def test_upload_returns_ok():
+    client, _, _, _ = _make_client()
+    resp = client.post("/api/upload", files={"file": ("test.png", _png(), "image/png")})
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["ok"] is True
+    assert data["is_gif"] is False
+
+
+def test_upload_gif_detects_is_gif():
+    client, _, _, _ = _make_client()
+    resp = client.post("/api/upload", files={"file": ("anim.gif", _gif(), "image/gif")})
+    assert resp.json()["is_gif"] is True
+
+
+def test_preview_returns_320x320_png():
+    client, _, _, _ = _make_client()
+    client.post("/api/upload", files={"file": ("test.png", _png(), "image/png")})
+    resp = client.post("/api/preview", json={
+        "fit": "crop", "dither": False, "brightness": 1.0, "contrast": 1.0, "saturation": 1.0
+    })
+    assert resp.status_code == 200
+    assert resp.headers["content-type"] == "image/png"
+    img = Image.open(io.BytesIO(resp.content))
+    assert img.size == (320, 320)
+
+
+def test_preview_without_upload_returns_400():
+    client, _, _, _ = _make_client()
+    resp = client.post("/api/preview", json={
+        "fit": "crop", "dither": False, "brightness": 1.0, "contrast": 1.0, "saturation": 1.0
+    })
+    assert resp.status_code == 400
+    assert "请先上传图片" in resp.json()["error"]
+
+
+def test_send_without_connection_returns_400():
+    client, _, _, _ = _make_client()
+    client.post("/api/upload", files={"file": ("test.png", _png(), "image/png")})
+    resp = client.post("/api/send", json={
+        "fit": "crop", "dither": False, "brightness": 1.0, "contrast": 1.0, "saturation": 1.0
+    })
+    assert resp.status_code == 400
+
+
+def test_send_image_to_connected_device():
+    client, _, _, fake = _make_client()
+    client.post("/api/connect", json={"address": "AA:BB:CC:DD:EE:FF"})
+    client.post("/api/upload", files={"file": ("test.png", _png(), "image/png")})
+    resp = client.post("/api/send", json={
+        "fit": "crop", "dither": False, "brightness": 1.0, "contrast": 1.0, "saturation": 1.0
+    })
+    assert resp.status_code == 200
+    assert any(c[0] == "send_image" for c in fake.calls)
+
+
+def test_send_gif_to_connected_device():
+    client, _, _, fake = _make_client()
+    client.post("/api/connect", json={"address": "AA:BB:CC:DD:EE:FF"})
+    client.post("/api/upload", files={"file": ("anim.gif", _gif(), "image/gif")})
+    resp = client.post("/api/gif", json={
+        "fps": 10, "fit": "crop", "dither": False,
+        "brightness": 1.0, "contrast": 1.0, "saturation": 1.0
+    })
+    assert resp.status_code == 200
+    assert any(c[0] == "send_gif" for c in fake.calls)
