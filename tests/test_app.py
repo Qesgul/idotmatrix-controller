@@ -146,3 +146,39 @@ def test_send_gif_to_connected_device():
     })
     assert resp.status_code == 200
     assert any(c[0] == "send_gif" for c in fake.calls)
+
+
+def test_brightness_without_connection_returns_400():
+    client, _, _, _ = _make_client()
+    resp = client.post("/api/brightness", json={"level": 70})
+    assert resp.status_code == 400
+
+
+def test_brightness_sets_level():
+    client, _, _, fake = _make_client()
+    client.post("/api/connect", json={"address": "AA:BB:CC:DD:EE:FF"})
+    resp = client.post("/api/brightness", json={"level": 70})
+    assert resp.status_code == 200
+    assert ("set_brightness", 70) in fake.calls
+
+
+def test_power_on():
+    client, _, _, fake = _make_client()
+    client.post("/api/connect", json={"address": "AA:BB:CC:DD:EE:FF"})
+    resp = client.post("/api/power", json={"on": True})
+    assert resp.status_code == 200
+    assert ("set_power", True) in fake.calls
+
+
+def test_power_off():
+    client, _, _, fake = _make_client()
+    client.post("/api/connect", json={"address": "AA:BB:CC:DD:EE:FF"})
+    resp = client.post("/api/power", json={"on": False})
+    assert resp.status_code == 200
+    assert ("set_power", False) in fake.calls
+
+
+def test_power_without_connection_returns_400():
+    client, _, _, _ = _make_client()
+    resp = client.post("/api/power", json={"on": True})
+    assert resp.status_code == 400
