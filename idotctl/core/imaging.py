@@ -4,18 +4,23 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
 
-from PIL import Image, ImageEnhance, ImageOps, UnidentifiedImageError
+from PIL import Image, ImageEnhance, ImageFilter, ImageOps, UnidentifiedImageError
 
 from idotctl.errors import ImageError
+
+# unsharp 基准强度:sharpen=1.0 → 此 percent。对应人工对比验证过的 "improved" 档。
+_SHARPEN_BASE_PERCENT = 120
 
 
 @dataclass(frozen=True)
 class ImageOptions:
     fit: Literal["crop", "letterbox", "stretch"] = "crop"
-    dither: bool = True         # Floyd–Steinberg
+    autocontrast: bool = True   # 缩小后自动拉满动态范围,改善偏灰原图主体清晰度
+    dither: bool = False        # Floyd–Steinberg;32×32 上会制造噪点,默认关
+    sharpen: float = 1.0        # 缩小后 unsharp 强度倍率,0=关,1.0=标准
     brightness: float = 1.0
     contrast: float = 1.0
-    saturation: float = 1.0
+    saturation: float = 1.1     # 轻微增艳,LED 点阵远看更醒目
     size: int = 32
 
     def __post_init__(self) -> None:
@@ -24,6 +29,8 @@ class ImageOptions:
             raise ValueError(f"fit must be one of {_VALID_FIT}, got {self.fit!r}")
         if self.size < 1:
             raise ValueError(f"size must be >= 1, got {self.size!r}")
+        if self.sharpen < 0:
+            raise ValueError(f"sharpen must be >= 0, got {self.sharpen!r}")
 
 
 @dataclass(frozen=True)
@@ -59,6 +66,9 @@ def _fit(img: Image.Image, opts: ImageOptions) -> Image.Image:
 
 
 def _adjust(img: Image.Image, opts: ImageOptions) -> Image.Image:
+    # 先把动态范围拉满,再让用户的亮度/对比/饱和在此基础上微调。
+    if opts.autocontrast:
+        img = ImageOps.autocontrast(img, cutoff=1)
     if opts.brightness != 1.0:
         img = ImageEnhance.Brightness(img).enhance(opts.brightness)
     if opts.contrast != 1.0:
@@ -66,6 +76,14 @@ def _adjust(img: Image.Image, opts: ImageOptions) -> Image.Image:
     if opts.saturation != 1.0:
         img = ImageEnhance.Color(img).enhance(opts.saturation)
     return img
+
+
+def _sharpen(img: Image.Image, amount: float) -> Image.Image:
+    """缩小后用 unsharp mask 把被低通糊掉的边缘重新拉出来。"""
+    if amount <= 0:
+        return img
+    percent = round(amount * _SHARPEN_BASE_PERCENT)
+    return img.filter(ImageFilter.UnsharpMask(radius=1.0, percent=percent, threshold=0))
 
 
 def _dither(img: Image.Image) -> Image.Image:
@@ -78,6 +96,7 @@ def _dither(img: Image.Image) -> Image.Image:
 def _process_pil(img: Image.Image, opts: ImageOptions) -> PixelFrame:
     img = _fit(img, opts)
     img = _adjust(img, opts)
+    img = _sharpen(img, opts.sharpen)
     if opts.dither:
         img = _dither(img)
     img = img.convert("RGB")

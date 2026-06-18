@@ -194,12 +194,14 @@ document.querySelectorAll('.fit-btn').forEach(btn => {
   });
 });
 document.getElementById('dither').addEventListener('change', refreshPreview);
+document.getElementById('autocontrast').addEventListener('change', refreshPreview);
 
 function bindSlider(sliderId, valId) {
   const s = document.getElementById(sliderId);
   const v = document.getElementById(valId);
   s.addEventListener('input', () => { v.textContent = parseFloat(s.value).toFixed(1); refreshPreview(); });
 }
+bindSlider('s-sharpen', 'v-sharpen');
 bindSlider('s-brightness', 'v-brightness');
 bindSlider('s-contrast', 'v-contrast');
 bindSlider('s-saturation', 'v-saturation');
