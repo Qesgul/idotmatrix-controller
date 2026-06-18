@@ -40,7 +40,7 @@ class ImageStaging:
         img = self._open(data).convert("RGB")
         frame = _process_pil(img, opts)
         small = Image.frombytes("RGB", (frame.size, frame.size), frame.pixels)
-        preview = small.resize((320, 320), Image.NEAREST)
+        preview = small.resize((320, 320), Image.Resampling.NEAREST)
         buf = io.BytesIO()
         preview.save(buf, "PNG")
         return buf.getvalue()
