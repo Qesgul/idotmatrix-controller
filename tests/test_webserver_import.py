@@ -1,6 +1,6 @@
 def test_webserver_package_importable():
     import idotctl.webserver
-    assert True
+    assert idotctl.webserver is not None
 
 def test_session_importable():
     from idotctl.webserver.session import DeviceSession
