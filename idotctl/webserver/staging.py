@@ -34,10 +34,12 @@ class ImageStaging:
         except (UnidentifiedImageError, OSError) as exc:
             raise ImageError("无法识别的图片格式") from exc
 
+    def _load(self) -> Image.Image:
+        return self._open(self._require_image())
+
     def render_preview(self, opts: ImageOptions) -> bytes:
         """返回 320×320 放大预览 PNG(最近邻插值)。所见即所发:走与发送完全相同的管道。"""
-        data = self._require_image()
-        img = self._open(data).convert("RGB")
+        img = self._load().convert("RGB")
         frame = _process_pil(img, opts)
         small = Image.frombytes("RGB", (frame.size, frame.size), frame.pixels)
         preview = small.resize((320, 320), Image.Resampling.NEAREST)
@@ -47,14 +49,11 @@ class ImageStaging:
 
     def get_frame(self, opts: ImageOptions) -> PixelFrame:
         """返回 32×32 PixelFrame,供 send_image 使用。"""
-        data = self._require_image()
-        img = self._open(data).convert("RGB")
-        return _process_pil(img, opts)
+        return _process_pil(self._load().convert("RGB"), opts)
 
     def get_gif_frames(self, opts: ImageOptions) -> list[PixelFrame]:
         """返回 GIF 全部帧的 PixelFrame 列表。"""
-        data = self._require_image()
-        img = self._open(data)
+        img = self._load()
         n = getattr(img, "n_frames", 1)
         frames: list[PixelFrame] = []
         for i in range(n):

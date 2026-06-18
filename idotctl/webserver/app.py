@@ -25,6 +25,7 @@ from idotctl.webserver.session import DeviceSession
 from idotctl.webserver.staging import ImageStaging
 
 _STATIC = Path(__file__).parent / "static"
+_INDEX_HTML = (_STATIC / "index.html").read_text(encoding="utf-8")
 
 app = FastAPI(title="iDotMatrix Web UI")
 app.mount("/static", StaticFiles(directory=_STATIC), name="static")
@@ -65,14 +66,15 @@ class ImageParams(BaseModel):
     contrast: float = 1.0
     saturation: float = 1.0
 
+    def to_image_options(self) -> ImageOptions:
+        return ImageOptions(
+            fit=self.fit, dither=self.dither, brightness=self.brightness,
+            contrast=self.contrast, saturation=self.saturation,
+        )
 
-class GifParams(BaseModel):
+
+class GifParams(ImageParams):
     fps: int = 10
-    fit: Literal["crop", "letterbox", "stretch"] = "crop"
-    dither: bool = True
-    brightness: float = 1.0
-    contrast: float = 1.0
-    saturation: float = 1.0
 
 
 class BrightnessRequest(BaseModel):
@@ -85,7 +87,7 @@ class PowerRequest(BaseModel):
 
 @app.get("/", response_class=HTMLResponse)
 async def index():
-    return (_STATIC / "index.html").read_text(encoding="utf-8")
+    return _INDEX_HTML
 
 
 @app.get("/api/status")
@@ -135,11 +137,7 @@ async def api_preview(
     req: ImageParams,
     staging: Annotated[ImageStaging, Depends(get_staging)],
 ):
-    opts = ImageOptions(
-        fit=req.fit, dither=req.dither, brightness=req.brightness,
-        contrast=req.contrast, saturation=req.saturation,
-    )
-    return Response(content=staging.render_preview(opts), media_type="image/png")
+    return Response(content=staging.render_preview(req.to_image_options()), media_type="image/png")
 
 
 @app.post("/api/send")
@@ -148,11 +146,7 @@ async def api_send(
     session: Annotated[DeviceSession, Depends(get_session)],
     staging: Annotated[ImageStaging, Depends(get_staging)],
 ):
-    opts = ImageOptions(
-        fit=req.fit, dither=req.dither, brightness=req.brightness,
-        contrast=req.contrast, saturation=req.saturation,
-    )
-    await session.send_image(staging.get_frame(opts))
+    await session.send_image(staging.get_frame(req.to_image_options()))
     return {"ok": True}
 
 
@@ -162,11 +156,7 @@ async def api_gif(
     session: Annotated[DeviceSession, Depends(get_session)],
     staging: Annotated[ImageStaging, Depends(get_staging)],
 ):
-    opts = ImageOptions(
-        fit=req.fit, dither=req.dither, brightness=req.brightness,
-        contrast=req.contrast, saturation=req.saturation,
-    )
-    await session.send_gif(staging.get_gif_frames(opts), fps=req.fps)
+    await session.send_gif(staging.get_gif_frames(req.to_image_options()), fps=req.fps)
     return {"ok": True}
 
 

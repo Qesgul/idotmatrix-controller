@@ -2,13 +2,14 @@
 
 let _hasImage = false;
 let _isGif = false;
-let _debounceTimer = null;
+let _previewUrl = null;
 
 /* ── Utilities ── */
 function debounce(fn, ms) {
+  let timer = null;
   return function (...args) {
-    clearTimeout(_debounceTimer);
-    _debounceTimer = setTimeout(() => fn(...args), ms);
+    clearTimeout(timer);
+    timer = setTimeout(() => fn(...args), ms);
   };
 }
 
@@ -167,9 +168,10 @@ const refreshPreview = debounce(async function () {
   try {
     const res = await api('POST', '/api/preview', getParams());
     const blob = await res.blob();
-    const url = URL.createObjectURL(blob);
+    if (_previewUrl) URL.revokeObjectURL(_previewUrl);
+    _previewUrl = URL.createObjectURL(blob);
     const img = document.getElementById('preview-img');
-    img.src = url;
+    img.src = _previewUrl;
     img.style.display = 'block';
     document.getElementById('preview-placeholder').style.display = 'none';
   } catch (e) { toast(e.message, true); }

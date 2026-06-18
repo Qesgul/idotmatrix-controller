@@ -33,6 +33,10 @@ class DeviceSession:
             self._connected = True
             self._address = address
 
+    def _require_connected(self) -> None:
+        if not self._connected:
+            raise BleConnectionError("请先连接设备")
+
     async def disconnect(self) -> None:
         async with self._lock:
             try:
@@ -43,24 +47,20 @@ class DeviceSession:
 
     async def send_image(self, frame: PixelFrame) -> None:
         async with self._lock:
-            if not self._connected:
-                raise BleConnectionError("请先连接设备")
+            self._require_connected()
             await self._device.send_image(frame)
 
     async def send_gif(self, frames: list[PixelFrame], fps: int) -> None:
         async with self._lock:
-            if not self._connected:
-                raise BleConnectionError("请先连接设备")
+            self._require_connected()
             await self._device.send_gif(frames, fps)
 
     async def set_brightness(self, level: int) -> None:
         async with self._lock:
-            if not self._connected:
-                raise BleConnectionError("请先连接设备")
+            self._require_connected()
             await self._device.set_brightness(level)
 
     async def set_power(self, on: bool) -> None:
         async with self._lock:
-            if not self._connected:
-                raise BleConnectionError("请先连接设备")
+            self._require_connected()
             await self._device.set_power(on)
