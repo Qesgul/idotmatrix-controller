@@ -2,12 +2,13 @@
 from __future__ import annotations
 import argparse
 import asyncio
+import io
 import sys
 from pathlib import Path
 
 from idotctl import config
 from idotctl.core.device import DeviceAdapter, SdkDevice
-from idotctl.core.imaging import ImageOptions, process_image, process_gif
+from idotctl.core.imaging import ImageOptions, PixelFrame, process_image, process_gif
 from idotctl.errors import IdotError, DeviceNotFoundError
 
 
@@ -48,10 +49,17 @@ async def cmd_connect(args, device: DeviceAdapter, config_path: Path = config.CO
 
 async def cmd_send(args, device: DeviceAdapter, config_path: Path = config.CONFIG_PATH) -> int:
     frame = process_image(args.image, _opts_from_args(args))
+    # Convert PixelFrame → PNG bytes for device upload
+    from PIL import Image
+    img = Image.frombytes("RGB", (frame.size, frame.size), frame.pixels)
+    buf = io.BytesIO()
+    img.save(buf, "PNG")
+    png_bytes = buf.getvalue()
+
     address = _resolve_address(args, config_path)
     await device.connect(address)
     try:
-        await device.send_image(frame)
+        await device.send_image(png_bytes)
     finally:
         await device.disconnect()
     print(f"已发送图片到 {address}")
@@ -60,10 +68,23 @@ async def cmd_send(args, device: DeviceAdapter, config_path: Path = config.CONFI
 
 async def cmd_gif(args, device: DeviceAdapter, config_path: Path = config.CONFIG_PATH) -> int:
     frames = process_gif(args.gif, _opts_from_args(args))
+    duration_ms = max(1, round(1000 / max(1, args.fps)))
+
+    # Convert PixelFrame list → GIF bytes for device upload
+    from PIL import Image
+    pil_frames = [Image.frombytes("RGB", (f.size, f.size), f.pixels) for f in frames]
+    buf = io.BytesIO()
+    pil_frames[0].save(
+        buf, format="GIF", save_all=True,
+        append_images=pil_frames[1:], loop=0, duration=duration_ms,
+        disposal=2,
+    )
+    gif_bytes = buf.getvalue()
+
     address = _resolve_address(args, config_path)
     await device.connect(address)
     try:
-        await device.send_gif(frames, args.fps)
+        await device.send_gif(gif_bytes)
     finally:
         await device.disconnect()
     print(f"已发送 GIF({len(frames)} 帧) 到 {address}")

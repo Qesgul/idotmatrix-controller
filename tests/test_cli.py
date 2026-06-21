@@ -78,9 +78,10 @@ def test_gif_sends_frames(tmp_path):
     args = build_parser().parse_args(["gif", str(p), "--no-dither"])
     rc = asyncio.run(cmd_gif(args, dev, config_path=cfgp))
     assert rc == 0
+    # send_gif now receives GIF bytes, not (frames, fps)
     gif_call = [c for c in dev.calls if c[0] == "send_gif"][0]
-    assert gif_call[1] == 3   # 3 frames sent
-    assert gif_call[2] == 10  # default fps
+    assert gif_call[0] == "send_gif"
+    assert isinstance(gif_call[1], int)  # data length
 
 
 def test_preview_writes_png(tmp_path):

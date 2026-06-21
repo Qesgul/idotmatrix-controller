@@ -93,7 +93,7 @@ function updateSendButtons() {
 
 /* ── Scan + connect ── */
 document.getElementById('btn-scan').addEventListener('click', async () => {
-  toast('扫描中(约5秒)...');
+  toast('扫描中(约10秒)...');
   try {
     const res = await api('POST', '/api/scan');
     const devices = await res.json();

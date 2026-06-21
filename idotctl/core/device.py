@@ -3,10 +3,11 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import struct
+import zlib
 from dataclasses import dataclass
 from typing import Protocol, runtime_checkable
 
-from idotctl.core.imaging import PixelFrame
 from idotctl.errors import (
     DeviceNotFoundError,
     BleConnectionError,
@@ -27,8 +28,8 @@ class DeviceAdapter(Protocol):
     async def scan(self, timeout: float) -> list[DeviceInfo]: ...
     async def connect(self, address: str) -> None: ...
     async def disconnect(self) -> None: ...
-    async def send_image(self, frame: PixelFrame) -> None: ...
-    async def send_gif(self, frames: list[PixelFrame], fps: int) -> None: ...
+    async def send_image(self, png_bytes: bytes) -> None: ...
+    async def send_gif(self, gif_bytes: bytes) -> None: ...
     async def set_brightness(self, level: int) -> None: ...
     async def set_power(self, on: bool) -> None: ...
 
@@ -52,11 +53,11 @@ class FakeDevice:
         self.calls.append(("disconnect",))
         self.connected_address = None
 
-    async def send_image(self, frame: PixelFrame) -> None:
-        self.calls.append(("send_image", frame))
+    async def send_image(self, png_bytes: bytes) -> None:
+        self.calls.append(("send_image", len(png_bytes)))
 
-    async def send_gif(self, frames: list[PixelFrame], fps: int) -> None:
-        self.calls.append(("send_gif", len(frames), fps))
+    async def send_gif(self, gif_bytes: bytes) -> None:
+        self.calls.append(("send_gif", len(gif_bytes)))
 
     async def set_brightness(self, level: int) -> None:
         self.calls.append(("set_brightness", level))
@@ -66,80 +67,83 @@ class FakeDevice:
 
 
 # ---------------------------------------------------------------------------
-# iDotMatrix BLE pixel-upload helpers
+# iDotMatrix BLE file-upload helpers
 # ---------------------------------------------------------------------------
-
-# On-wire format for a 32×32 image upload (derived from open iDotMatrix BLE
-# protocol; packet structure used by all known idotmatrix community clients).
+# The device expects *file data* (PNG or GIF), not raw pixel bytes.
+# The on-wire format is derived from the open-source idotmatrix community
+# client (https://github.com/8none1/iDotMatrix).
 #
-# Packet layout for a raw-pixel upload:
-#   Byte 0:   total length of this BLE write (including itself), low byte
-#   Byte 1:   total length of this BLE write, high byte
-#   Byte 2:   command family  (0x00 = display/image)
-#   Byte 3:   sub-command     (0x0A = upload image data)
-#   Byte 4:   frame-number low byte
-#   Byte 5:   frame-number high byte
-#   Bytes 6+: pixel data as RGBA (4 bytes per pixel, A always 0xFF)
+# PNG upload: each BLE write contains a 9-byte header + file chunk.
+#   Header: [total_len(2,LE)] [0x00, 0x00, flag(1)] [png_len(4,LE)]
+#   flag = 0 for first chunk, 2 for subsequent chunks.
 #
-# Before streaming pixels, send a "begin upload" command:
-#   [0x09, 0x00, 0x00, 0x0B, num_frames_low, num_frames_high,
-#    size, size, speed_low, speed_high]
-# where size = frame.size (e.g. 32), speed = round(1000/fps) in ms.
+# GIF upload: each BLE write contains a 16-byte header + file chunk.
+#   Header: [chunk_len(2,LE)] [0xFF, 0xFF] [flag(1)]
+#           [gif_len(4,LE)] [crc32(4,LE)] [0xFF, 0x05, 0x00, 0x0D]
+#   flag = 0 for first chunk, 2 for subsequent chunks.
+#
+# Before uploading an image, the device must be switched to DIY image
+# mode via the command [5, 0, 4, 1, 1].
 
-_BLE_CHUNK = 20  # conservative MTU; BlueZ default is 20 usable bytes
-
-
-def _image_begin_packet(num_frames: int, size: int, speed_ms: int) -> bytearray:
-    """Header that tells the device how many frames/size/speed are coming."""
-    data = bytearray(
-        [
-            0x09,
-            0x00,
-            0x00,
-            0x0B,
-            num_frames & 0xFF,
-            (num_frames >> 8) & 0xFF,
-            size & 0xFF,
-            size & 0xFF,
-            speed_ms & 0xFF,
-            (speed_ms >> 8) & 0xFF,
-        ]
-    )
-    return data
+_PNG_CHUNK_SIZE = 4096
+_GIF_CHUNK_SIZE = 4096
 
 
-def _frame_packets(frame_idx: int, frame: PixelFrame) -> list[bytearray]:
-    """Convert one PixelFrame into a sequence of BLE write payloads."""
-    # Build full RGBA buffer for this frame
-    raw = frame.pixels  # RGB bytes, len = size*size*3
-    rgba = bytearray(len(raw) // 3 * 4)
-    for i in range(len(raw) // 3):
-        rgba[i * 4 + 0] = raw[i * 3 + 0]  # R
-        rgba[i * 4 + 1] = raw[i * 3 + 1]  # G
-        rgba[i * 4 + 2] = raw[i * 3 + 2]  # B
-        rgba[i * 4 + 3] = 0xFF              # A
+def _png_packets(png_data: bytes) -> list[bytearray]:
+    """Encode PNG file data into one or more BLE write payloads.
+
+    Protocol (from community client):
+      For each 4096-byte chunk of PNG data:
+        idk = len(png_data) + num_chunks   (16-bit signed, LE)
+        header = idk(2) + [0x00, 0x00, flag(1)] + png_len(4, LE)
+        payload = header + chunk
+    """
+    chunks = [bytearray(png_data[i:i + _PNG_CHUNK_SIZE])
+              for i in range(0, len(png_data), _PNG_CHUNK_SIZE)]
+    idk = len(png_data) + len(chunks)
+    idk_bytes = struct.pack("<h", idk)
+    png_len_bytes = struct.pack("<i", len(png_data))
 
     packets: list[bytearray] = []
-    # Split RGBA data into BLE-sized chunks; each chunk gets a 6-byte header
-    # so usable payload per packet = _BLE_CHUNK - 6
-    payload_size = _BLE_CHUNK - 6
-    offset = 0
-    while offset < len(rgba):
-        chunk = rgba[offset : offset + payload_size]
-        pkt_len = 6 + len(chunk)
-        pkt = bytearray(
-            [
-                pkt_len & 0xFF,
-                (pkt_len >> 8) & 0xFF,
-                0x00,
-                0x0A,
-                frame_idx & 0xFF,
-                (frame_idx >> 8) & 0xFF,
-            ]
-        )
-        pkt.extend(chunk)
-        packets.append(pkt)
-        offset += payload_size
+    for i, chunk in enumerate(chunks):
+        flag = 2 if i > 0 else 0
+        header = idk_bytes + bytearray([0, 0, flag]) + png_len_bytes
+        packets.append(header + chunk)
+    return packets
+
+
+def _gif_packets(gif_data: bytes) -> list[bytearray]:
+    """Encode GIF file data into one or more BLE write payloads.
+
+    Protocol (from community client):
+      For each 4096-byte chunk of GIF data:
+        header (16 bytes) = chunk_len(2,LE) + [0xFF,0xFF] + flag(1)
+                            + gif_len(4,LE) + crc32(4,LE) + [0xFF,0x05,0x00,0x0D]
+        payload = header + chunk
+    """
+    header_template = bytearray([
+        0xFF, 0xFF,       # magic bytes
+        0,                 # flag: 0=first chunk, 2=subsequent
+        0xFF, 0xFF, 0xFF, 0xFF,  # gif_len (filled below)
+        0xFF, 0xFF, 0xFF, 0xFF,  # crc32  (filled below)
+        0xFF, 0x05, 0x00, 0x0D,
+    ])
+
+    gif_len = len(gif_data)
+    crc = zlib.crc32(gif_data) & 0xFFFFFFFF
+    header_template[3:7] = struct.pack("<I", gif_len)
+    header_template[7:11] = struct.pack("<I", crc)
+
+    chunks = [bytearray(gif_data[i:i + _GIF_CHUNK_SIZE])
+              for i in range(0, len(gif_data), _GIF_CHUNK_SIZE)]
+
+    packets: list[bytearray] = []
+    for i, chunk in enumerate(chunks):
+        header = bytearray(header_template)  # copy
+        header[2] = 2 if i > 0 else 0
+        chunk_len = len(header) + len(chunk)
+        full = struct.pack("<H", chunk_len) + header + chunk
+        packets.append(full)
     return packets
 
 
@@ -163,25 +167,29 @@ class SdkDevice:
     # ------------------------------------------------------------------
 
     async def scan(self, timeout: float) -> list[DeviceInfo]:
-        """Discover iDotMatrix devices via BLE.
-
-        The SDK's ``BleakScanner.discover()`` does not accept a timeout
-        kwarg directly — it uses the default (5 s).  We honour *timeout*
-        by running with ``asyncio.wait_for``.
-        """
+        """Discover iDotMatrix devices via BLE."""
         try:
-            from idotmatrix_sdk import IDotMatrix  # lazy import — SDK optional at test time
+            from bleak import BleakScanner
+            from bleak.backends.scanner import AdvertisementData
 
-            raw = await asyncio.wait_for(IDotMatrix.search_devices(), timeout=timeout)
-        except asyncio.TimeoutError as exc:
-            raise DeviceNotFoundError("BLE scan timed out") from exc
+            response = await BleakScanner.discover(
+                return_adv=True, timeout=timeout,
+            )
+            raw: list[DeviceInfo] = []
+            for _, (device, advertisement) in response.items():
+                if (
+                    isinstance(advertisement, AdvertisementData)
+                    and advertisement.local_name
+                    and advertisement.local_name.startswith("IDM-")
+                ):
+                    raw.append(DeviceInfo(name=advertisement.local_name, address=device.address))
         except Exception as exc:
             raise DeviceNotFoundError(f"BLE scan failed: {exc}") from exc
 
         if not raw:
             raise DeviceNotFoundError("No iDotMatrix devices found nearby")
 
-        return [DeviceInfo(name=d.name, address=d.address) for d in raw]
+        return raw
 
     # ------------------------------------------------------------------
     # connect / disconnect
@@ -189,7 +197,7 @@ class SdkDevice:
 
     async def connect(self, address: str) -> None:
         """Connect to device at *address* with up to 3 retries (exponential back-off)."""
-        from idotmatrix_sdk import IDotMatrix  # lazy import
+        from idotmatrix_sdk import IDotMatrix
 
         last_exc: Exception | None = None
         for attempt in range(3):
@@ -202,7 +210,7 @@ class SdkDevice:
                 last_exc = exc
                 log.warning("Connect attempt %d failed: %s", attempt + 1, exc)
                 if attempt < 2:
-                    await asyncio.sleep(2 ** attempt)  # 0 s, 1 s, 2 s
+                    await asyncio.sleep(2 ** attempt)
 
         raise BleConnectionError(
             f"Could not connect to {address} after 3 attempts: {last_exc}"
@@ -220,33 +228,46 @@ class SdkDevice:
     # send_image / send_gif
     # ------------------------------------------------------------------
 
-    async def send_image(self, frame: PixelFrame) -> None:
-        """Upload a single static image to the device."""
-        await self.send_gif([frame], fps=1)
+    async def _enter_image_mode(self) -> None:
+        """Switch the device to DIY image mode (required before upload)."""
+        dev = self._device
+        if dev is None:
+            raise BleConnectionError("Not connected")
+        # Command: enter DIY draw mode = [5, 0, 4, 1, 1]
+        await dev.write(bytearray([5, 0, 4, 1, 1]))
 
-    async def send_gif(self, frames: list[PixelFrame], fps: int) -> None:
-        """Upload an animated GIF (one or more frames) to the device."""
+    async def send_image(self, png_bytes: bytes) -> None:
+        """Upload a single static image (PNG file bytes) to the device."""
         dev = self._device
         if dev is None:
             raise BleConnectionError("Not connected")
 
         try:
-            speed_ms = max(1, round(1000 / max(1, fps)))
-            size = frames[0].size if frames else 32
-
-            # Tell the device how many frames are coming
-            begin = _image_begin_packet(len(frames), size, speed_ms)
-            await dev.write(begin, response=True)
-
-            # Stream each frame
-            for idx, frame in enumerate(frames):
-                for pkt in _frame_packets(idx, frame):
-                    await dev.write(pkt)
+            await self._enter_image_mode()
+            for pkt in _png_packets(png_bytes):
+                await dev.write(pkt, response=True)
         except BleConnectionError:
             raise
         except Exception as exc:
             raise FirmwareUnsupportedError(
                 f"Image upload failed — firmware may be unsupported: {exc}"
+            ) from exc
+
+    async def send_gif(self, gif_bytes: bytes) -> None:
+        """Upload an animated GIF (file bytes) to the device."""
+        dev = self._device
+        if dev is None:
+            raise BleConnectionError("Not connected")
+
+        try:
+            await self._enter_image_mode()
+            for pkt in _gif_packets(gif_bytes):
+                await dev.write(pkt, response=True)
+        except BleConnectionError:
+            raise
+        except Exception as exc:
+            raise FirmwareUnsupportedError(
+                f"GIF upload failed — firmware may be unsupported: {exc}"
             ) from exc
 
     # ------------------------------------------------------------------

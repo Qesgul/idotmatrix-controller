@@ -102,7 +102,7 @@ async def api_status(session: Annotated[DeviceSession, Depends(get_session)]):
 
 @app.post("/api/scan")
 async def api_scan(session: Annotated[DeviceSession, Depends(get_session)]):
-    devices = await session.scan(timeout=5.0)
+    devices = await session.scan(timeout=10.0)
     return [{"name": d.name, "address": d.address} for d in devices]
 
 
@@ -152,7 +152,7 @@ async def api_send(
     session: Annotated[DeviceSession, Depends(get_session)],
     staging: Annotated[ImageStaging, Depends(get_staging)],
 ):
-    await session.send_image(staging.get_frame(req.to_image_options()))
+    await session.send_image(staging.get_png_bytes(req.to_image_options()))
     return {"ok": True}
 
 
@@ -162,7 +162,7 @@ async def api_gif(
     session: Annotated[DeviceSession, Depends(get_session)],
     staging: Annotated[ImageStaging, Depends(get_staging)],
 ):
-    await session.send_gif(staging.get_gif_frames(req.to_image_options()), fps=req.fps)
+    await session.send_gif(staging.get_gif_bytes(req.to_image_options(), fps=req.fps))
     return {"ok": True}
 
 

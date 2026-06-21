@@ -2,7 +2,6 @@
 from __future__ import annotations
 import asyncio
 from idotctl.core.device import DeviceAdapter, DeviceInfo
-from idotctl.core.imaging import PixelFrame
 from idotctl.errors import BleConnectionError
 
 
@@ -23,7 +22,7 @@ class DeviceSession:
     def current_address(self) -> str | None:
         return self._address
 
-    async def scan(self, timeout: float = 5.0) -> list[DeviceInfo]:
+    async def scan(self, timeout: float = 10.0) -> list[DeviceInfo]:
         async with self._lock:
             return await self._device.scan(timeout)
 
@@ -49,20 +48,20 @@ class DeviceSession:
         self._connected = False
         self._address = None
 
-    async def send_image(self, frame: PixelFrame) -> None:
+    async def send_image(self, png_bytes: bytes) -> None:
         async with self._lock:
             self._require_connected()
             try:
-                await self._device.send_image(frame)
+                await self._device.send_image(png_bytes)
             except Exception:
                 self._clear_connection()
                 raise
 
-    async def send_gif(self, frames: list[PixelFrame], fps: int) -> None:
+    async def send_gif(self, gif_bytes: bytes) -> None:
         async with self._lock:
             self._require_connected()
             try:
-                await self._device.send_gif(frames, fps)
+                await self._device.send_gif(gif_bytes)
             except Exception:
                 self._clear_connection()
                 raise

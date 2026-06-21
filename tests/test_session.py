@@ -2,7 +2,6 @@ import asyncio
 import pytest
 from idotctl.webserver.session import DeviceSession
 from idotctl.core.device import FakeDevice
-from idotctl.core.imaging import PixelFrame
 from idotctl.errors import BleConnectionError
 
 
@@ -37,7 +36,7 @@ def test_disconnect_clears_state():
 def test_scan_returns_devices():
     async def _run():
         session = DeviceSession(FakeDevice())
-        result = await session.scan(5.0)
+        result = await session.scan(10.0)
         assert len(result) == 1
         assert result[0].address == "AA:BB:CC:DD:EE:FF"
     asyncio.run(_run())
@@ -46,9 +45,8 @@ def test_scan_returns_devices():
 def test_send_image_raises_when_not_connected():
     async def _run():
         session = DeviceSession(FakeDevice())
-        frame = PixelFrame(size=32, pixels=bytes(32 * 32 * 3))
         with pytest.raises(BleConnectionError):
-            await session.send_image(frame)
+            await session.send_image(b"\x89PNG")
     asyncio.run(_run())
 
 
@@ -57,9 +55,9 @@ def test_send_image_delegates_to_device():
         fake = FakeDevice()
         session = DeviceSession(fake)
         await session.connect("AA:BB:CC:DD:EE:FF")
-        frame = PixelFrame(size=32, pixels=bytes(32 * 32 * 3))
-        await session.send_image(frame)
-        assert ("send_image", frame) in fake.calls
+        png_bytes = b"\x89PNG\r\n\x1a\n"
+        await session.send_image(png_bytes)
+        assert ("send_image", len(png_bytes)) in fake.calls
     asyncio.run(_run())
 
 
@@ -68,9 +66,9 @@ def test_send_gif_delegates_to_device():
         fake = FakeDevice()
         session = DeviceSession(fake)
         await session.connect("AA:BB:CC:DD:EE:FF")
-        frames = [PixelFrame(size=32, pixels=bytes(32 * 32 * 3))]
-        await session.send_gif(frames, fps=10)
-        assert ("send_gif", 1, 10) in fake.calls
+        gif_bytes = b"GIF89a"
+        await session.send_gif(gif_bytes)
+        assert ("send_gif", len(gif_bytes)) in fake.calls
     asyncio.run(_run())
 
 
