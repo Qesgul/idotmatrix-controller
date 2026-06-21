@@ -60,6 +60,14 @@ idotctl/
 .venv/Scripts/python.exe -m pytest -v
 ```
 
+## 更新日志
+
+### 2026-06-21 修复 BLE 扫描与图片发送
+
+- **修复 BLE 扫描超时**：原实现使用 `asyncio.wait_for(timeout=5)` 包裹 SDK 扫描，与 SDK 内部 `BleakScanner.discover()` 默认 5 秒超时冲突，导致扫描永远无法完成。现改为直接将 timeout 传给 `BleakScanner.discover()`，默认扫描时间提升至 10 秒。
+- **修复图片发送协议**：原实现使用了错误的自定义 RGBA 像素协议，设备固件不识别导致图片发送"成功"但屏幕无变化。现改为设备实际期望的 **PNG/GIF 文件上传协议**（与社区版 idotmatrix 库一致），并在发送前先发送 `set_image_mode(1)` 进入 DIY 绘图模式。
+- **接口变更**：`send_image` / `send_gif` 参数从 `PixelFrame` 改为 `bytes`（PNG/GIF 文件字节），更贴近设备实际通信方式。
+
 ## 硬件 smoke（需真实设备）
 
 ```bash
