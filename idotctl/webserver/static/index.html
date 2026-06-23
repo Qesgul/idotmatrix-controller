@@ -61,10 +61,17 @@
     <button class="fit-btn" data-fit="letterbox">留边</button>
     <button class="fit-btn" data-fit="stretch">拉伸</button>
     <label class="dither-lbl">
-      <input type="checkbox" id="dither" checked> 抖动
+      <input type="checkbox" id="autocontrast" checked> 自动对比
+    </label>
+    <label class="dither-lbl">
+      <input type="checkbox" id="dither"> 抖动
     </label>
   </div>
   <div class="sliders-row">
+    <div class="slider-item">
+      <label>锐化 <span id="v-sharpen">1.0</span></label>
+      <input type="range" id="s-sharpen" min="0" max="3" step="0.1" value="1">
+    </div>
     <div class="slider-item">
       <label>亮度 <span id="v-brightness">1.0</span></label>
       <input type="range" id="s-brightness" min="0" max="2" step="0.1" value="1">
@@ -87,6 +94,14 @@
   <div id="power-btns">
     <button id="btn-on" disabled>开屏</button>
     <button id="btn-off" disabled>关屏</button>
+  </div>
+</section>
+
+<section id="bigpreview-card" class="card">
+  <p class="card-label">放大预览 · 32×32 像素铺满显示（所见即所发）</p>
+  <div id="bigpreview-wrap">
+    <span id="bigpreview-placeholder">上传图片后显示放大预览</span>
+    <img id="bigpreview-img" alt="32×32 放大预览">
   </div>
 </section>
 

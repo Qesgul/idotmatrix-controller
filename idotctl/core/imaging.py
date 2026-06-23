@@ -8,8 +8,28 @@ from PIL import Image, ImageEnhance, ImageFilter, ImageOps, UnidentifiedImageErr
 
 from idotctl.errors import ImageError
 
-# unsharp 基准强度:sharpen=1.0 → 此 percent。对应人工对比验证过的 "improved" 档。
-_SHARPEN_BASE_PERCENT = 120
+# unsharp 基准:sharpen=1.0 → 此 percent + 半径。
+# 实测:32×32 上 radius>=1、percent>=120 会沿每条边炸出青白光晕,反而毁图;
+# 改为小半径低强度,默认 1.0 档对应"清晰而不振铃"。
+_SHARPEN_BASE_PERCENT = 60
+_SHARPEN_RADIUS = 0.6
+_SHARPEN_THRESHOLD = 2
+
+# sRGB ↔ 线性光 8-bit LUT。缩小=对邻域像素求平均,必须在线性光空间做才物理正确;
+# 直接平均 sRGB 编码值会让缩小后的图发暗发灰、暗部细节糊成一团(肉眼实测明显)。
+_GAMMA = 2.2
+_SRGB_TO_LINEAR = [round((i / 255) ** _GAMMA * 255) for i in range(256)]
+_LINEAR_TO_SRGB = [round((i / 255) ** (1 / _GAMMA) * 255) for i in range(256)]
+
+
+def _to_linear(img: Image.Image) -> Image.Image:
+    """sRGB → 线性光(RGB 三通道共用同一 LUT)。"""
+    return img.point(_SRGB_TO_LINEAR * 3)
+
+
+def _to_srgb(img: Image.Image) -> Image.Image:
+    """线性光 → sRGB。"""
+    return img.point(_LINEAR_TO_SRGB * 3)
 
 
 @dataclass(frozen=True)
@@ -52,17 +72,19 @@ def _open_rgb(path: str) -> Image.Image:
 
 
 def _fit(img: Image.Image, opts: ImageOptions) -> Image.Image:
+    # 在线性光空间完成缩放(裁剪/留边的几何操作不受色彩空间影响),最后转回 sRGB。
     n = opts.size
+    lin = _to_linear(img)
     if opts.fit == "stretch":
-        return img.resize((n, n), Image.LANCZOS)
-    if opts.fit == "letterbox":
-        fitted = ImageOps.contain(img, (n, n), Image.LANCZOS)
-        canvas = Image.new("RGB", (n, n), (0, 0, 0))
+        out = lin.resize((n, n), Image.LANCZOS)
+    elif opts.fit == "letterbox":
+        fitted = ImageOps.contain(lin, (n, n), Image.LANCZOS)
+        out = Image.new("RGB", (n, n), (0, 0, 0))
         off = ((n - fitted.width) // 2, (n - fitted.height) // 2)
-        canvas.paste(fitted, off)
-        return canvas
-    # 默认 crop：覆盖式缩放 + 居中裁剪
-    return ImageOps.fit(img, (n, n), Image.LANCZOS)
+        out.paste(fitted, off)
+    else:  # 默认 crop：覆盖式缩放 + 居中裁剪
+        out = ImageOps.fit(lin, (n, n), Image.LANCZOS)
+    return _to_srgb(out)
 
 
 def _adjust(img: Image.Image, opts: ImageOptions) -> Image.Image:
@@ -79,11 +101,12 @@ def _adjust(img: Image.Image, opts: ImageOptions) -> Image.Image:
 
 
 def _sharpen(img: Image.Image, amount: float) -> Image.Image:
-    """缩小后用 unsharp mask 把被低通糊掉的边缘重新拉出来。"""
+    """缩小后用 unsharp mask 把被低通糊掉的边缘轻微提回来(小半径,避免光晕)。"""
     if amount <= 0:
         return img
     percent = round(amount * _SHARPEN_BASE_PERCENT)
-    return img.filter(ImageFilter.UnsharpMask(radius=1.0, percent=percent, threshold=0))
+    return img.filter(ImageFilter.UnsharpMask(
+        radius=_SHARPEN_RADIUS, percent=percent, threshold=_SHARPEN_THRESHOLD))
 
 
 def _dither(img: Image.Image) -> Image.Image:

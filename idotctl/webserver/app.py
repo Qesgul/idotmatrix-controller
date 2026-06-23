@@ -62,14 +62,17 @@ class ConnectRequest(BaseModel):
 
 class ImageParams(BaseModel):
     fit: Literal["crop", "letterbox", "stretch"] = "crop"
-    dither: bool = True
+    autocontrast: bool = True
+    dither: bool = False
+    sharpen: float = 1.0
     brightness: float = 1.0
     contrast: float = 1.0
     saturation: float = 1.0
 
     def to_image_options(self) -> ImageOptions:
         return ImageOptions(
-            fit=self.fit, dither=self.dither, brightness=self.brightness,
+            fit=self.fit, autocontrast=self.autocontrast, dither=self.dither,
+            sharpen=self.sharpen, brightness=self.brightness,
             contrast=self.contrast, saturation=self.saturation,
         )
 

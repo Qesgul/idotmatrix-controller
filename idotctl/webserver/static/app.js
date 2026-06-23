@@ -44,7 +44,9 @@ function getParams() {
   const fit = document.querySelector('.fit-btn.active')?.dataset.fit || 'crop';
   return {
     fit,
+    autocontrast: document.getElementById('autocontrast').checked,
     dither: document.getElementById('dither').checked,
+    sharpen: parseFloat(document.getElementById('s-sharpen').value),
     brightness: parseFloat(document.getElementById('s-brightness').value),
     contrast: parseFloat(document.getElementById('s-contrast').value),
     saturation: parseFloat(document.getElementById('s-saturation').value),
@@ -178,10 +180,16 @@ const refreshPreview = debounce(async function () {
     const blob = await res.blob();
     if (_previewUrl) URL.revokeObjectURL(_previewUrl);
     _previewUrl = URL.createObjectURL(blob);
-    const img = document.getElementById('preview-img');
-    img.src = _previewUrl;
-    img.style.display = 'block';
-    document.getElementById('preview-placeholder').style.display = 'none';
+    // 同一份 object URL 喂给小预览和底部全宽大预览
+    for (const [imgId, phId] of [
+      ['preview-img', 'preview-placeholder'],
+      ['bigpreview-img', 'bigpreview-placeholder'],
+    ]) {
+      const img = document.getElementById(imgId);
+      img.src = _previewUrl;
+      img.style.display = 'block';
+      document.getElementById(phId).style.display = 'none';
+    }
   } catch (e) { toast(e.message, true); }
 }, 300);
 
